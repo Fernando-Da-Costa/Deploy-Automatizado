@@ -1,0 +1,138 @@
+name: CI/CD AWS Lambda
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: 🧪 Rodar Testes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Instalar dependências
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Rodar testes
+        run: pytest app/tests/
+
+
+  create_bucket:
+    name: 🚀 Criando bucket via terraform
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Instalar Terraform CLI
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.4.6
+
+      - name: Inicializar o Terraform
+        run: terraform init
+        working-directory: ./
+
+      - name: Aplicar o Terraform
+        run: terraform apply -auto-approve
+        working-directory: ./
+
+      - name: Fazer build do AWS SAM
+        run: sam build
+
+      - name: Deploy AWS Lambda (DEV)
+        run: sam deploy --s3-bucket bucket-dev-fernandoooo --stack-name minha-lambda-dev --capabilities CAPABILITY_IAM
+
+#
+#  deploy_dev:
+#    name: 🚀 Deploy DEV
+#    runs-on: ubuntu-latest
+#    needs: test
+#    if: github.ref == 'refs/heads/develop'
+#
+#    steps:
+#      - name: Checkout do código
+#        uses: actions/checkout@v4
+#
+#      - name: Configurar AWS Credentials
+#        uses: aws-actions/configure-aws-credentials@v2
+#        with:
+#          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          aws-region: sa-east-1
+
+
+
+#  deploy_staging:
+#    name: 🚀 Deploy STAGING
+#    runs-on: ubuntu-latest
+#    needs: test
+#    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+#
+#    steps:
+#      - name: Checkout do código
+#        uses: actions/checkout@v4
+#
+#      - name: Configurar AWS Credentials
+#        uses: aws-actions/configure-aws-credentials@v2
+#        with:
+#          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          aws-region: us-east-1
+#
+#      - name: Fazer build do AWS SAM
+#        run: sam build
+#
+#      - name: Deploy AWS Lambda (STAGING)
+#        run: sam deploy --s3-bucket bucket-stg --stack-name minha-lambda-stg --capabilities CAPABILITY_IAM
+#
+#  deploy_prod:
+#    name: 🚀 Deploy PRODUÇÃO
+#    runs-on: ubuntu-latest
+#    needs: deploy_staging
+#    if: github.ref == 'refs/heads/main'
+#
+#    environment:
+#      name: production
+#      url: https://minha-lambda-prod.aws.com
+#
+#    steps:
+#      - name: Checkout do código
+#        uses: actions/checkout@v4
+#
+#      - name: Configurar AWS Credentials
+#        uses: aws-actions/configure-aws-credentials@v2
+#        with:
+#          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          aws-region: us-east-1
+#
+#      - name: Fazer build do AWS SAM
+#        run: sam build
+#
+#      - name: Deploy AWS Lambda (PRODUÇÃO)
+#        run: sam deploy --s3-bucket bucket-prd --stack-name minha-lambda-prod --capabilities CAPABILITY_IAM
